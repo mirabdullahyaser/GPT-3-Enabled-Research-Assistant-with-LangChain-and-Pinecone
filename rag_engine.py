@@ -1,11 +1,14 @@
 import os, tempfile
 import pinecone
 from pathlib import Path
+import random
 
 from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 from langchain import OpenAI
+from langchain_openai import ChatOpenAI
+
 from langchain.llms.openai import OpenAIChat
 from langchain.document_loaders import DirectoryLoader
 from langchain.text_splitter import CharacterTextSplitter
@@ -35,8 +38,11 @@ def split_documents(documents):
     return texts
 
 def embeddings_on_local_vectordb(texts):
+    randstr = str(random.randint(1,10000))
+    dir1 = LOCAL_VECTOR_STORE_DIR.as_posix()+randstr
+    print (dir1)
     vectordb = Chroma.from_documents(texts, embedding=OpenAIEmbeddings(),
-                                     persist_directory=LOCAL_VECTOR_STORE_DIR.as_posix())
+                                     persist_directory=dir1)
     vectordb.persist()
     retriever = vectordb.as_retriever(search_kwargs={'k': 7})
     return retriever
@@ -50,7 +56,19 @@ def embeddings_on_pinecone(texts):
 
 def query_llm(retriever, query):
     qa_chain = ConversationalRetrievalChain.from_llm(
-        llm=OpenAIChat(openai_api_key=st.session_state.openai_api_key),
+        #llm=OpenAIChat(openai_api_key=st.session_state.openai_api_key),
+        #llm=OpenAIChat(),
+        llm=ChatOpenAI(
+            model="gpt-4o",
+            temperature=0,
+            max_tokens=None,
+            timeout=None,
+            max_retries=2,
+            # api_key="...",  # if you prefer to pass api key in directly instaed of using env vars
+            # base_url="...",
+            # organization="...",
+            # other params...
+        ),
         retriever=retriever,
         return_source_documents=True,
     )
@@ -93,11 +111,15 @@ def process_documents():
     if not st.session_state.openai_api_key or not st.session_state.pinecone_api_key or not st.session_state.pinecone_env or not st.session_state.pinecone_index or not st.session_state.source_docs:
         st.warning(f"Please upload the documents and provide the missing fields.")
     else:
+        #st.warning(f"xxxx"+str(st.session_state.source_docs))
         try:
             for source_doc in st.session_state.source_docs:
                 #
                 with tempfile.NamedTemporaryFile(delete=False, dir=TMP_DIR.as_posix(), suffix='.pdf') as tmp_file:
+                    #st.warning(f"xxxx"+str(tmp_file.name))
+                    #st.warning(f"xxxx"+str(TMP_DIR.as_posix()))
                     tmp_file.write(source_doc.read())
+                    tmp_file.close()
                 #
                 documents = load_documents()
                 #
